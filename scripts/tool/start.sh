@@ -36,12 +36,12 @@ if [ -z $BOOMFLOW_ADMIN_PRIVATE_KEY ]; then
 	exit 1
 fi
 
-if [ -z $CFX_URL ]; then
-	echo "CFX_URL not set"
+if [ -z $EVM_RPC_URL ]; then
+	echo "$EVM_RPC_URL not set"
 	exit 2
 fi
 
-echo "CFX URL: $CFX_URL"
+echo "EVM RPC URL: $EVM_RPC_URL"
 
 epochNum=1
 function uniSed() {

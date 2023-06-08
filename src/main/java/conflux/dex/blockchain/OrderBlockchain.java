@@ -41,7 +41,13 @@ public class OrderBlockchain implements InfluxDBReportable {
 			@Value("${user.admin.address}") String adminAddress,
 			@Value("${user.admin.privateKey}") String adminPrivateKey) {
 		logger.info("Force init cfx, network id is {}", cfx.getNetworkId());
+		this.admin = Account.create(cfx, adminPrivateKey);
+		logger.info("adminAddress from PK is [{}], [{}]", this.admin.getAddress(), this.admin.getHexAddress());
 		this.adminAddress = AddressTool.address(adminAddress);
+		if (!this.adminAddress.getHexAddress().equals(this.admin.getAddress().getHexAddress())) {
+			logger.info("configured admin address is {}", this.adminAddress);
+			throw new IllegalArgumentException("admin address mismatch");
+		}
 		BigInteger balance = cfx.getBalance(this.adminAddress).sendAndGet();
 		if (balance.compareTo(BigInteger.ZERO) == 0) {
 			throw BusinessException.internalError("Balance of DEX admin is too small: " + balance);
@@ -49,7 +55,6 @@ public class OrderBlockchain implements InfluxDBReportable {
 		
 		balanceGauge.setValue(CfxUnit.drip2Cfx(balance).longValue());
 		
-		this.admin = Account.create(cfx, adminPrivateKey);
 
 		logger.info("DEX admin initialized: address = {}, nonce = {}, balance = {}",
 				adminAddress, this.admin.getNonce(), CfxUnit.drip2Cfx(balance).toPlainString());
