@@ -13,10 +13,14 @@ public class BlockchainConfig extends AutoConfigBase{
 	public BlockchainConfig() {
 		instance = this;
 	}
-	
+
+	@Value("${user.admin.privateKey}")
+	public String adminPrivateKey;
+	@Value("${blockchain.evm.url}")
+	public String evmUrl;
 	@Value("${blockchain.enabled:false}")
 	public boolean enabled;
-	
+
 	// settlement configurations
 	@Value("${blockchain.settlement.pause.sleep:5000}")
 	public long settlementPausedSleepMillis = 5000;

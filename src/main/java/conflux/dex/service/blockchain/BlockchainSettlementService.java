@@ -12,6 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.web3j.crypto.Credentials;
 import org.web3j.crypto.Hash;
 
 import com.codahale.metrics.Timer;
@@ -39,8 +40,11 @@ import conflux.dex.service.HealthService.PauseSource;
 import conflux.dex.service.blockchain.settle.Settleable;
 import conflux.dex.service.blockchain.settle.TransactionRecorder;
 import conflux.web3j.Account;
-import conflux.web3j.types.RawTransaction;
 import conflux.web3j.types.SendTransactionResult;
+import org.web3j.crypto.RawTransaction;
+import org.web3j.protocol.Web3j;
+import org.web3j.protocol.http.HttpService;
+import org.web3j.tx.RawTransactionManager;
 
 @Service
 public class BlockchainSettlementService extends BatchWorker<Settleable> {
@@ -49,7 +53,9 @@ public class BlockchainSettlementService extends BatchWorker<Settleable> {
 	private static final QueueMetric queue = Metrics.queue(BlockchainSettlementService.class);
 	private static final Timer perf = Metrics.timer(BlockchainSettlementService.class, "perf");
 	private static final Timer perfSendTx = Metrics.timer(BlockchainSettlementService.class, "sign-send-tx");
-	
+	private Web3j web3j;
+	private RawTransactionManager rawTxManager;
+
 	private DexDao dao;
 	private OrderBlockchain blockchain;
 	private TransactionConfirmationMonitor monitor;
@@ -75,6 +81,8 @@ public class BlockchainSettlementService extends BatchWorker<Settleable> {
 		this.blockchain = blockchain;
 		this.monitor = monitor;
 		this.config = config;
+		this.web3j = Web3j.build(new HttpService(config.evmUrl));
+		this.rawTxManager = new RawTransactionManager(this.web3j, Credentials.create(config.adminPrivateKey));
 		
 		Metrics.dump(this);
 		
@@ -251,20 +259,24 @@ public class BlockchainSettlementService extends BatchWorker<Settleable> {
 		BigInteger epoch = this.heartBeatService == null
 				? admin.getCfx().getEpochNumber().sendAndGet()
 				: this.heartBeatService.getCurrentEpoch();
-		RawTransaction tx = RawTransaction.call(nonce, context.gasLimit, context.contract, context.storageLimit, epoch, context.data);
-		
+		conflux.web3j.types.RawTransaction cfxTx = conflux.web3j.types.RawTransaction.call(nonce, context.gasLimit, context.contract, context.storageLimit, epoch, context.data);
+		BigInteger txGasPrice = config.txGasPrice;
 		if (resendOnError) {
 			BigInteger prevGasPrice = txRecorder.getLast().gasPrice;
 			if (prevGasPrice != null) {
-				tx.setGasPrice(BlockchainConfig.instance.txResendGasPriceDelta.add(prevGasPrice));
+				txGasPrice = BlockchainConfig.instance.txResendGasPriceDelta.add(prevGasPrice);
 			}
 		}
-		
-		String signedTx = admin.sign(tx);
+		RawTransaction tx =
+				RawTransaction.createTransaction(nonce, txGasPrice, context.gasLimit,
+						context.contract.getHexAddress(), BigInteger.ZERO, context.data);
+
+//		String signedTx = admin.sign(tx);
+		String signedTx = rawTxManager.sign(tx);
 		String txHash = Hash.sha3(signedTx);
 
 		NonceKeeper.reserve(resendOnError, this.dao, txHash, nonce);
-		data.updateSettlement(this.dao, SettlementStatus.OffChainSettled, txHash, tx);
+		data.updateSettlement(this.dao, SettlementStatus.OffChainSettled, txHash, cfxTx);
 		
 		SendTransactionResult result;
 		
