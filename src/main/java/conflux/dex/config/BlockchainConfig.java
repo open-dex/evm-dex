@@ -253,4 +253,20 @@ public class BlockchainConfig extends AutoConfigBase{
 	public String getTxRelayerUrls() {
 		return txRelayerUrls;
 	}
+
+	public String getAdminPrivateKey() {
+		return adminPrivateKey;
+	}
+
+	public void setAdminPrivateKey(String adminPrivateKey) {
+		this.adminPrivateKey = adminPrivateKey;
+	}
+
+	public String getEvmUrl() {
+		return evmUrl;
+	}
+
+	public void setEvmUrl(String evmUrl) {
+		this.evmUrl = evmUrl;
+	}
 }
