@@ -1,9 +1,8 @@
-const { Conflux, format } = require("js-conflux-sdk");
-const JSBI = require("./WrapJSBI");
+const ethers = require('ethers')
 const boomflowContract = require('../Boomflow.json');
 const {getConfig,boomflowAddrKey} = require('../tool/mysql.js')
 let sender,cfx = null;
-let cfxUrl = process.env.CFX_URL;
+let cfxUrl = process.env.EVM_RPC_URL;
 let boomflowadminprivatekey = process.env.BOOMFLOW_ADMIN_PRIVATE_KEY;
 async function run() {
     let boomflow_addr = await getConfig(boomflowAddrKey)
@@ -11,62 +10,18 @@ async function run() {
     if (boomflow_addr === null || boomflow_addr === undefined || boomflow_addr.length === 0) {
         throw new Error('boomflow address not configured in database.')
     }
-    cfx = new Conflux({
-        url: cfxUrl,
-        defaultGasPrice: 1,
-        // log: console
-    });
-    await cfx.updateNetworkId();
-    sender = cfx.wallet.addPrivateKey(boomflowadminprivatekey).address;
-    boomflow_addr = format.address(boomflow_addr, cfx.networkId)
+    cfx = ethers.getDefaultProvider(cfxUrl);
+    let wallet = new ethers.Wallet(boomflowadminprivatekey, cfx);
 
-
-    var contracts = []
-
-// Boomflow
-    contracts.push(
-        cfx.Contract({
-            address: boomflow_addr,
-            abi: boomflowContract.abi
-        })
-    )
-
-    cfx.getNextNonce(sender).then(async (nonce) => {
-        contracts.map(async (contract, index) => {
-            //console.log(JSBI.add(nonce, JSBI.BigInt(contracts.indexOf(contract))))
-            resume(contract, JSBI.add(nonce, JSBI.BigInt(index)))
-        })
-        await waitNonce(JSBI.add(nonce, JSBI.BigInt(contracts.length)), sender)
-    })
+    const contract = new ethers.Contract(boomflow_addr, boomflowContract.abi, wallet)
+    await contract.Resume().then(tx=>tx.wait())
+        .then(()=>log(`resumed.`))
+        .catch(e=>console.log("resume error:", e));
 }
 function log(...data) {
     console.info(...data)
 }
-//===============================================
-// Resume
-function resume(token, nonce) {
-    const txParams = {
-        from: sender,
-        nonce: nonce, // make nonce appropriate
-    };
-    log(`try to resume ${token.address} nonce ${nonce}`)
-    return token.Resume().sendTransaction(txParams).executed()
-        .then(result=>{log(`resume ok ${result.transactionHash}`)})
-        .catch(err=>log(`resume fail.`, err));
-}
 
-async function waitNonce(target, acc) {
-    let x;
-    while (true) {
-        x = await cfx.getNextNonce(acc);
-        if (x < target) {
-            await sleep(1000);
-            continue;
-        }
-        break;
-    }
-    return x;
-}
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));

@@ -1,5 +1,6 @@
 package conflux.dex.service.blockchain;
 
+import java.io.IOException;
 import java.math.BigInteger;
 import java.util.HashMap;
 import java.util.List;
@@ -43,6 +44,8 @@ import conflux.web3j.Account;
 import conflux.web3j.types.SendTransactionResult;
 import org.web3j.crypto.RawTransaction;
 import org.web3j.protocol.Web3j;
+import org.web3j.protocol.core.methods.response.EthSendTransaction;
+import org.web3j.protocol.core.methods.response.EthTransaction;
 import org.web3j.protocol.http.HttpService;
 import org.web3j.tx.RawTransactionManager;
 
@@ -215,8 +218,14 @@ public class BlockchainSettlementService extends BatchWorker<Settleable> {
 		this.monitor.add(data);
 	}
 	
-	private boolean isSettledOnChain(String txHash) {
-		return this.blockchain.getAdmin().getCfx().getTransactionByHash(txHash).sendAndGet().isPresent();
+	private boolean isSettledOnChain(String txHash) throws IOException {
+		EthTransaction txQuery = this.web3j.ethGetTransactionByHash(txHash).send();
+		if (txQuery.hasError()) {
+			logger.error("query tx fail: {}", txQuery.getError());
+			throw new IOException(txQuery.getError().getMessage());
+		}
+		return txQuery.getTransaction().isPresent();
+//		return this.blockchain.getAdmin().getCfx().getTransactionByHash(txHash).sendAndGet().isPresent();
 	}
 	
 	private void fatal(Settleable data, String format, Object... args) {
@@ -274,18 +283,30 @@ public class BlockchainSettlementService extends BatchWorker<Settleable> {
 //		String signedTx = admin.sign(tx);
 		String signedTx = rawTxManager.sign(tx);
 		String txHash = Hash.sha3(signedTx);
+		logger.info("resendOnError {} , nonce {} tx hash {}", resendOnError, nonce, txHash);
 
 		NonceKeeper.reserve(resendOnError, this.dao, txHash, nonce);
 		data.updateSettlement(this.dao, SettlementStatus.OffChainSettled, txHash, cfxTx);
+		if (!resendOnError) {
+			// just track nonce in memory, since we use both EVM web3j and cfx sdk.
+			admin.setNonce(nonce.add(BigInteger.ONE));
+		}
 		
 		SendTransactionResult result;
 		
 		try (Context ctx = perfSendTx.time()) {
+			EthSendTransaction ethSendTransaction = web3j.ethSendRawTransaction(signedTx).send();
+			if (ethSendTransaction.hasError()) {
+				result = new SendTransactionResult(ethSendTransaction.getError());
+			} else {
+				result = new SendTransactionResult(txHash);
+			}
 			// For re-send case, do not update the local tx nonce of DEX admin.
-			result = resendOnError
-					? admin.getCfx().sendRawTransactionAndGet(signedTx)
-					: admin.send(signedTx);	// nonce++ if succeeded.
-			NonceKeeper.saveNext(resendOnError, this.dao, admin.getNonce().toString());
+//			result = resendOnError
+//					? admin.getCfx().sendRawTransactionAndGet(signedTx)
+//					: admin.send(signedTx);	// nonce++ if succeeded.
+//			NonceKeeper.saveNext(resendOnError, this.dao, admin.getNonce().toString());
+			NonceKeeper.saveNext(resendOnError, this.dao, resendOnError ? nonce.toString() : nonce.add(BigInteger.ONE).toString());
 		}
 		
 		if (result.getRawError() != null) {
@@ -319,7 +340,7 @@ public class BlockchainSettlementService extends BatchWorker<Settleable> {
 			case InvalidSignature:
 			case Internal:
 			case Unknown:
-				if (resendOnError && txRecorder.getReceipt(admin.getCfx()).isPresent()) {
+				if (resendOnError && txRecorder.getReceipt(web3j).isPresent()) {
 					logger.info("failed to re-send transaction to full node, but previous transaction already executed: reason = {}, settleable = {}, adminNonce = {}",
 							result.getErrorType(), data, admin.getNonce());
 				} else {
@@ -336,8 +357,11 @@ public class BlockchainSettlementService extends BatchWorker<Settleable> {
 				break;
 				
 			default:
-				throw new Exception(String.format("failed to send transaction to full node and got unknown error: code = %s, data = %s, message = %s",
-						result.getRawError().getCode(), result.getRawError().getData(), result.getRawError().getMessage()));
+				logger.info("tx sender {}", this.rawTxManager.getFromAddress());
+				String info = String.format("failed to send transaction to full node and got unknown error: code = %s, data = %s, message = %s",
+						result.getRawError().getCode(), result.getRawError().getData(), result.getRawError().getMessage());
+				logger.error("tx fail: {}", info);
+				throw new Exception(info);
 			}
 		} else if (!result.getTxHash().equals(txHash)) {
 			this.fatal(data, "tx hash mismatch: tx.hash() = %s, RPC returned = %s", txHash, result.getTxHash());

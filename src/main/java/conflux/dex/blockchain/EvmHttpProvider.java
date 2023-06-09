@@ -10,6 +10,8 @@ import java.io.IOException;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static conflux.dex.tool.EvmTxTool.convertEvmLog;
+
 public class EvmHttpProvider extends HttpService {
     public EvmHttpProvider(String url, OkHttpClient client) {
         super(url, client);
@@ -21,11 +23,7 @@ public class EvmHttpProvider extends HttpService {
             EvmCompatibleLog.Response res = super.send(request, EvmCompatibleLog.Response.class);
             if (!res.hasError()) {
                 List<Log> list = res.getValue().stream().map(log -> {
-                    Log log1 = new Log();
-                    log1.setAddress(log.getAddress());
-                    log1.setTopics(log.getTopics());
-                    log1.setData(log.getData());
-                    log1.setTransactionHash(log.getTransactionHash().get());
+                    Log log1 = convertEvmLog(log);
                     return log1;
                 }).collect(Collectors.toList());
                 CfxListResponse<Log> listResp = new CfxListResponse<>();
@@ -36,4 +34,6 @@ public class EvmHttpProvider extends HttpService {
         }
         return super.send(request, responseType);
     }
+
+
 }

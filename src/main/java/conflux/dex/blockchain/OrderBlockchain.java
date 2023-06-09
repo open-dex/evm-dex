@@ -23,6 +23,7 @@ import conflux.web3j.Account;
 import conflux.web3j.Cfx;
 import conflux.web3j.CfxUnit;
 import conflux.web3j.types.RawTransaction;
+import org.web3j.crypto.Credentials;
 
 @Component
 public class OrderBlockchain implements InfluxDBReportable {
@@ -43,6 +44,8 @@ public class OrderBlockchain implements InfluxDBReportable {
 		logger.info("Force init cfx, network id is {}", cfx.getNetworkId());
 		this.admin = Account.create(cfx, adminPrivateKey);
 		logger.info("adminAddress from PK is [{}], [{}]", this.admin.getAddress(), this.admin.getHexAddress());
+		logger.info("PK prefix {}", adminPrivateKey.substring(0, 10));
+		logger.info("evm address {}", Credentials.create(adminPrivateKey).getAddress());
 		this.adminAddress = AddressTool.address(adminAddress);
 		if (!this.adminAddress.getHexAddress().equals(this.admin.getAddress().getHexAddress())) {
 			logger.info("configured admin address is {}", this.adminAddress);

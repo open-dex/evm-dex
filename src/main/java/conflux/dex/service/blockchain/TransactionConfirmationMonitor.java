@@ -1,5 +1,6 @@
 package conflux.dex.service.blockchain;
 
+import java.io.IOException;
 import java.math.BigInteger;
 import java.util.NavigableMap;
 import java.util.Optional;
@@ -33,6 +34,8 @@ import conflux.web3j.RpcException;
 import conflux.web3j.contract.diagnostics.Recall;
 import conflux.web3j.request.Epoch;
 import conflux.web3j.response.Receipt;
+import org.web3j.protocol.Web3j;
+import org.web3j.protocol.http.HttpService;
 
 @Service
 public class TransactionConfirmationMonitor {
@@ -44,7 +47,8 @@ public class TransactionConfirmationMonitor {
 	private static QueueMetric queue = Metrics.queue(TransactionConfirmationMonitor.class);
 	private static Timer confirmPerf = Metrics.timer(TransactionConfirmationMonitor.class, "perf");
 	private static Histogram epochsToExecuteStat = Metrics.histogram(TransactionConfirmationMonitor.class, "epochs", "execute");
-	
+	private final Web3j web3j;
+
 	private BlockchainConfig config = new BlockchainConfig();
 	
 	private Cfx cfx;
@@ -58,8 +62,9 @@ public class TransactionConfirmationMonitor {
 	private NavigableMap<Long, Settleable> items = new ConcurrentSkipListMap<Long, Settleable>();
 	
 	@Autowired
-	public TransactionConfirmationMonitor(Cfx cfx, DexDao dao, HeartBeatService heartBeatService) {
+	public TransactionConfirmationMonitor(Cfx cfx, BlockchainConfig config, DexDao dao, HeartBeatService heartBeatService) {
 		this.cfx = cfx;
+		this.web3j = Web3j.build(new HttpService(config.evmUrl));
 		this.dao = dao;
 		this.heartBeatService = heartBeatService;
 		
@@ -105,7 +110,7 @@ public class TransactionConfirmationMonitor {
 		return this.healthService != null && this.healthService.isPausedBy(PauseSource.Blockchain);
 	}
 	
-	@Scheduled(initialDelay = 3_000, fixedDelay = 3_000)
+	@Scheduled(initialDelay = 3, fixedDelay = 3_000)
 	public void confirmTransactions() {
 		if (this.isSystemPaused()) {
 			return;
@@ -114,7 +119,7 @@ public class TransactionConfirmationMonitor {
 		try {
 			this.confirmTransactionsUnsafe();
 		} catch (Exception e) {
-			logger.debug("failed to confirm transaction", e);
+			logger.error("failed to confirm transaction", e);
 		}
 	}
 
@@ -126,7 +131,7 @@ public class TransactionConfirmationMonitor {
 		return removed;
 	}
 
-	public CheckConfirmationResult checkConfirmation(Long txNonce) throws InterruptedException {
+	public CheckConfirmationResult checkConfirmation(Long txNonce) throws InterruptedException, IOException {
 		Settleable settleable = items.get(txNonce);
 		if (settleable == null) {
 			throw BusinessException.validateFailed("tx not found in memory, it may be finished: " + txNonce);
@@ -135,7 +140,7 @@ public class TransactionConfirmationMonitor {
 		return checkConfirmation(settleable, confirmedEpoch);
 	}
 	
-	public void confirmTransactionsUnsafe() throws RpcException, InterruptedException {
+	public void confirmTransactionsUnsafe() throws RpcException, InterruptedException, IOException {
 		BigInteger confirmedEpoch = this.cfx.getEpochNumber(Epoch.latestConfirmed()).sendAndGet();
 		CheckConfirmationResult result = CheckConfirmationResult.Confirmed;
 		
@@ -181,10 +186,10 @@ public class TransactionConfirmationMonitor {
 		}
 	}
 	
-	private CheckConfirmationResult checkConfirmation(Settleable settleable, BigInteger confirmedEpoch) throws RpcException, InterruptedException {
+	private CheckConfirmationResult checkConfirmation(Settleable settleable, BigInteger confirmedEpoch) throws RpcException, InterruptedException, IOException {
 		long start = System.currentTimeMillis();
 		
-		Optional<Receipt> receipt = settleable.getRecorder().getReceipt(this.cfx);
+		Optional<Receipt> receipt = settleable.getRecorder().getReceipt(this.web3j);
 		
 		// transaction unpacked yet
 		if (!receipt.isPresent()) {
@@ -202,9 +207,9 @@ public class TransactionConfirmationMonitor {
 			settleable.updateTxHash(this.dao, packedTxHash);
 		}
 
-		if (receipt.get().getOutcomeStatus() != 0) {
+		if (receipt.get().getOutcomeStatus() != 1) {// for SUCCESS: core space uses 0, evm uses 1
 			// dump data from contract for diagnostic
-			logger.info("begin to dump failed epoch...");
+			logger.info("begin to dump failed tx {}", packedTxHash);
 			try {
 				NodejsWrapper.dump(this.cfxUrl, packedTxHash);
 				logger.info("complete to dump failed epoch");
@@ -233,13 +238,16 @@ public class TransactionConfirmationMonitor {
 	 * when get transaction by hash. So, just wait for at least 4 epochs and get
 	 * transaction again.
 	 */
-	private boolean isTxExists(String txHash) throws InterruptedException {
+	private boolean isTxExists(String txHash) throws InterruptedException, IOException {
 		BigInteger targetEpoch = this.heartBeatService.getCurrentEpoch().add(CHECK_TX_DISCARDED_EPOCHS);
 		
 		while (true) {
-			if (this.cfx.getTransactionByHash(txHash).sendAndGet().isPresent()) {
+			if (this.web3j.ethGetTransactionByHash(txHash).send().getTransaction().isPresent()) {
 				return true;
 			}
+//			if (this.cfx.getTransactionByHash(txHash).sendAndGet().isPresent()) {
+//				return true;
+//			}
 			
 			BigInteger currentEpoch = this.heartBeatService.getCurrentEpoch();
 			if (currentEpoch.compareTo(targetEpoch) > 0) {

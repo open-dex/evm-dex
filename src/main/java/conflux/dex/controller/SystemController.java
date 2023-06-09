@@ -1,5 +1,6 @@
 package conflux.dex.controller;
 
+import java.io.IOException;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -148,7 +149,7 @@ public class SystemController {
 	public TransactionConfirmationMonitor.CheckConfirmationResult checkTx(Long txNonce) throws InterruptedException {
 		try {
 			return SpringTool.getBean(TransactionConfirmationMonitor.class).checkConfirmation(txNonce);
-		} catch (RpcException e) {
+		} catch (RpcException | IOException e) {
 			throw BusinessException.internalError(e.getMessage());
 		}
 	}

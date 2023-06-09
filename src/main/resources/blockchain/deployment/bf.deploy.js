@@ -198,6 +198,8 @@ async function run() {
         log()
     }
     if (updateBoomflow || program.boomflowAdmin) {
+//        await callBoomflow(boomflowAddr, 'Resume')
+//        return
         // add dex admin to WhitelistAdmin and Whitelisted of boomflow contract
         await callBoomflow(boomflowAddr, 'addWhitelisted', dexAdmin);
 
