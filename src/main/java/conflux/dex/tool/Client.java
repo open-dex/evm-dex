@@ -1,11 +1,18 @@
 package conflux.dex.tool;
 
+import java.util.Arrays;
 import java.util.Objects;
 import java.util.Optional;
 
 import conflux.dex.common.Utils;
 import conflux.dex.controller.AddressTool;
 import conflux.dex.model.EIP712Data;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 import org.springframework.web.client.RestTemplate;
 
 import conflux.dex.blockchain.TypedWithdraw;
@@ -46,22 +53,50 @@ public class Client {
 	
 	public String getBoomflowAddress() {
 		String url = String.format("%s/common/boomflow", this.url);
-		Response response = this.rest.getForObject(url, Response.class);
+		Response response = getResponse(url);
 		return response.getEntity(String.class).get();
 	}
 	
 	public long getChainId() {
 		String url = String.format("%s/common/chainid", this.url);
-		Response response = this.rest.getForObject(url, Response.class);
+		Response response = getResponse(url);
 		return response.getEntity(Long.class).get();
 	}
 	
 	public Optional<Currency> getCurrency(String name) {
 		String url = String.format("%s/currencies/%s", this.url, name);
-		Response response = this.rest.getForObject(url, Response.class);
+		System.out.println("url is " + url);
+
+		Response response = getResponse(url);
 		return response.getEntity(Currency.class, BusinessFault.CurrencyNotFound);
 	}
-	
+
+	@Nullable
+	private Response getResponse(String url) {
+		HttpHeaders headers = getHttpHeaders();
+		HttpEntity<String> entity = new HttpEntity<>(headers);
+
+		Response response = this.rest.exchange(url, HttpMethod.GET, entity, Response.class).getBody();
+		return response;
+	}
+	@Nullable
+	private <T> Response postResponse(String url, T body) {
+		HttpHeaders headers = getHttpHeaders();
+		HttpEntity<T> entity = new HttpEntity<>(body, headers);
+
+		Response response = this.rest.exchange(url, HttpMethod.POST, entity, Response.class).getBody();
+		return response;
+	}
+
+	@NotNull
+	private static HttpHeaders getHttpHeaders() {
+		HttpHeaders headers = new HttpHeaders();
+		headers.add("user-agent", "Application");
+		headers.setAccept(Arrays.asList(MediaType.APPLICATION_JSON));
+		headers.setContentType(MediaType.APPLICATION_JSON);
+		return headers;
+	}
+
 	public int addCurrency(AddCurrencyRequest request) {
 		String url = String.format("%s/currencies", this.url);
 		Response response = this.rest.postForObject(url, request, Response.class);
@@ -70,7 +105,7 @@ public class Client {
 	
 	public Optional<Product> getProduct(String name) {
 		String url = String.format("%s/products/%s", this.url, name);
-		Response response = this.rest.getForObject(url, Response.class);
+		Response response = this.getResponse(url);
 		return response.getEntity(Product.class, BusinessFault.ProductNotFound);
 	}
 	
@@ -100,19 +135,19 @@ public class Client {
 	
 	public Optional<User> getUser(String name) {
 		String url = String.format("%s/users/%s", this.url, name);
-		Response response = this.rest.getForObject(url, Response.class);
+		Response response = getResponse(url);
 		return response.getEntity(User.class, BusinessFault.UserNotFound);
 	}
 	
 	public Optional<Account> getAccount(String user, String currency) {
 		String url = String.format("%s/accounts/%s/%s", this.url, user, currency);
-		Response response = this.rest.getForObject(url, Response.class);
+		Response response = getResponse(url);
 		return response.getEntity(Account.class, BusinessFault.UserNotFound, BusinessFault.AccountNotFound);
 	}
 	
 	public long placeOrder(PlaceOrderRequest request) {
 		String url = String.format("%s/orders/place", this.url);
-		Response response = this.rest.postForObject(url, request, Response.class);
+		Response response = postResponse(url, request);
 		if (Objects.equals(response.getData(), SystemSuspended.getCode())) {
 			System.out.println("place order :" + response.getMessage());
 			return 0;

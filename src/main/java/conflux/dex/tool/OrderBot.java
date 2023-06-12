@@ -104,8 +104,10 @@ public class OrderBot {
 	}
 	
 	public static void main(String[] args) throws Exception {
+		ClassPatcher.changeCode();
 		configLog();
-		
+		//Traders.needUnlock = false;
+
 		@SuppressWarnings("resource")
 		ApplicationContext context = new AnnotationConfigApplicationContext(
 				OrderBot.class, Context.class, ProductFactory.class, Traders.class, PriceRandom.class);
@@ -360,7 +362,7 @@ class Traders {
 	protected conflux.web3j.types.Address erc777User;
 	@Value("${user.trader.number}")
 	private int numTraders;
-	@Value("#{'${user.trader.predefined:}'.split(',')}")
+	@Value("#{'${user.trader.predefined}'.split(',')}")
 	private List<String> tradersHex;
 	private List<conflux.web3j.types.Address> traders;
 	static boolean needUnlock = true;
@@ -382,12 +384,9 @@ class Traders {
 	@Autowired
 	public void init(Context context, ProductFactory factory) throws Exception {
 		this.erc777User = AddressTool.address(this.erc777UserHex);
-		if (!needUnlock) {
-			return;
-		}
 		this.tradersHex.removeIf(String::isEmpty);
 		tradersHex = tradersHex.stream().map(String::toLowerCase).collect(Collectors.toList());
-		if (this.tradersHex.size() == 1 || (this.tradersHex.isEmpty() && this.numTraders < 2)) {
+		if (needUnlock && (this.tradersHex.size() == 1 || (this.tradersHex.isEmpty() && this.numTraders < 2))) {
 			throw new Exception("too few traders configured, requires 2 at least");
 		}
 

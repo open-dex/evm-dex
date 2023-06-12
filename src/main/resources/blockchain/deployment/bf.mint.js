@@ -12,14 +12,43 @@ async function buildContract(name, abi) {
     console.log(`token ${name} addr ${addr}`)
     const contract = new ethers.Contract(addr, abi, wallet);
     contract._name = name;
-    console.info(`mint, contract ${name} ${addr}`)
     return contract;
 }
+async function mintFaucetToken(name, to, wallet) {
+    const tokenAddr = await getTokenAddress(name);
+    const abi = ["function mint(address to, uint256 amount) public"];
+    const tokenContract = new ethers.Contract(tokenAddr, abi, wallet);
+    console.log(`mint ${name} ${tokenAddr} to ${to}`)
+    return tokenContract.mint(to, ethers.utils.parseEther("9000")).then(tx=>tx.wait());
+}
+async function depositToken(name, wallet) {
+    const tokenAddr = await getTokenAddress(name);
+    const crclAddr = await getTokenAddress(name, 'contract_address');
+    console.log(`crclAddr `, crclAddr)
+    const token20 = await buildContract(name, erc777Contract.abi)
+    await token20.approve(crclAddr, ethers.utils.parseEther("9000")).then(tx=>tx.wait());
+    console.log(`approved`)
+    const abi = ["function deposit(address to, uint amount) public"];
+    const crcl = new ethers.Contract(crclAddr, abi, wallet);
+
+    await crcl.deposit(sender, ethers.utils.parseEther("9000")).then(tx=>tx.wait());
+    console.log(`deposited`)
+}
 async function run() {
+    const [,,cmd, arg1, arg2] = process.argv;
     let cfxUrl = process.env.EVM_RPC_URL;
     const cfx = ethers.getDefaultProvider(cfxUrl);
     wallet = new ethers.Wallet(process.env.BOOMFLOW_ADMIN_PRIVATE_KEY, cfx);
     sender = await wallet.getAddress();
+    console.log(`sender is `, sender)
+
+    if (cmd === 'mint') {
+        await mintFaucetToken(arg1, arg2, wallet);
+        return
+    } else if (cmd === 'deposit') {
+        await depositToken(arg1, wallet);
+        return
+    }
 
     const EOS_contract = await buildContract('EOS', erc777Contract.abi);
     const KCoin_contract = await buildContract('KCoin', erc777Contract.abi);
@@ -104,4 +133,4 @@ function sleep(ms) {
 
 run()
     .then(()=>console.info('mint finished.'))
-    .catch(err=>console.info(`mint fail`, err));
+    .catch(err=>console.info(`mint fail`, err.error || err));
