@@ -1,17 +1,13 @@
 package conflux.dex.service.blockchain.settle;
 
-import java.io.IOException;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-import conflux.dex.tool.EvmTxTool;
 import conflux.web3j.Cfx;
 import conflux.web3j.response.Receipt;
 import conflux.web3j.types.RawTransaction;
-import org.web3j.protocol.Web3j;
-import org.web3j.protocol.core.methods.response.TransactionReceipt;
 
 /**
  * TransactionRecorder records transactions for a single settlement.
@@ -65,11 +61,11 @@ public class TransactionRecorder {
 	/**
 	 * Try to get receipt for all sent transactions.
 	 */
-	public Optional<Receipt> getReceipt(Web3j cfx) throws IOException {
+	public Optional<Receipt> getReceipt(Cfx cfx) {
 		for (Record record : this.records) {
-			Optional<TransactionReceipt> receipt = cfx.ethGetTransactionReceipt(record.txHash).send().getTransactionReceipt();
+			Optional<Receipt> receipt = cfx.getTransactionReceipt(record.txHash).sendAndGet();
 			if (receipt.isPresent()) {
-				return Optional.of(EvmTxTool.convertReceipt(receipt.get()));
+				return receipt;
 			}
 		}
 		

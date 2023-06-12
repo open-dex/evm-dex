@@ -218,14 +218,8 @@ public class BlockchainSettlementService extends BatchWorker<Settleable> {
 		this.monitor.add(data);
 	}
 	
-	private boolean isSettledOnChain(String txHash) throws IOException {
-		EthTransaction txQuery = this.web3j.ethGetTransactionByHash(txHash).send();
-		if (txQuery.hasError()) {
-			logger.error("query tx fail: {}", txQuery.getError());
-			throw new IOException(txQuery.getError().getMessage());
-		}
-		return txQuery.getTransaction().isPresent();
-//		return this.blockchain.getAdmin().getCfx().getTransactionByHash(txHash).sendAndGet().isPresent();
+	private boolean isSettledOnChain(String txHash) {
+		return this.blockchain.getAdmin().getCfx().getTransactionByHash(txHash).sendAndGet().isPresent();
 	}
 	
 	private void fatal(Settleable data, String format, Object... args) {
@@ -276,6 +270,7 @@ public class BlockchainSettlementService extends BatchWorker<Settleable> {
 				txGasPrice = BlockchainConfig.instance.txResendGasPriceDelta.add(prevGasPrice);
 			}
 		}
+		context.gasLimit = BigInteger.valueOf(900_000);
 		RawTransaction tx =
 				RawTransaction.createTransaction(nonce, txGasPrice, context.gasLimit,
 						context.contract.getHexAddress(), BigInteger.ZERO, context.data);
@@ -283,7 +278,7 @@ public class BlockchainSettlementService extends BatchWorker<Settleable> {
 //		String signedTx = admin.sign(tx);
 		String signedTx = rawTxManager.sign(tx);
 		String txHash = Hash.sha3(signedTx);
-		logger.info("resendOnError {} , nonce {} tx hash {}", resendOnError, nonce, txHash);
+		logger.info("resendOnError : {} , nonce {} tx hash {}", resendOnError, nonce, txHash);
 
 		NonceKeeper.reserve(resendOnError, this.dao, txHash, nonce);
 		data.updateSettlement(this.dao, SettlementStatus.OffChainSettled, txHash, cfxTx);
@@ -340,7 +335,7 @@ public class BlockchainSettlementService extends BatchWorker<Settleable> {
 			case InvalidSignature:
 			case Internal:
 			case Unknown:
-				if (resendOnError && txRecorder.getReceipt(web3j).isPresent()) {
+				if (resendOnError && txRecorder.getReceipt(admin.getCfx()).isPresent()) {
 					logger.info("failed to re-send transaction to full node, but previous transaction already executed: reason = {}, settleable = {}, adminNonce = {}",
 							result.getErrorType(), data, admin.getNonce());
 				} else {

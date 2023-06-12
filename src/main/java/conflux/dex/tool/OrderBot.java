@@ -16,6 +16,7 @@ import conflux.dex.controller.AddressTool;
 import conflux.dex.controller.EvmAddress;
 import conflux.dex.tool.contract.ERCContract;
 import conflux.web3j.CfxUnit;
+import conflux.web3j.types.CfxAddress;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -503,8 +504,8 @@ class Traders {
 	}
 	
 	private void ensureErc777Balance(Cfx cfx, conflux.web3j.types.Address erc777, BigInteger amountPerTrader) throws Exception {
-		ERC777 call = new ERC777(cfx, erc777);
-		BigInteger balance = call.balanceOf(this.erc777User);
+		ERC777 call = new ERC777(cfx, new CfxAddress(erc777.getAddress()));
+		BigInteger balance = call.balanceOf(new Address(this.erc777User.getHexAddress()));
 		BigInteger totalDeposit = amountPerTrader.multiply(BigInteger.valueOf(this.traders.size()));
 		System.out.println("");
 		if (balance == null || balance.compareTo(totalDeposit) < 0) {

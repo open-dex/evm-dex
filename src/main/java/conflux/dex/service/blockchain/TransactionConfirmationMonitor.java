@@ -189,7 +189,7 @@ public class TransactionConfirmationMonitor {
 	private CheckConfirmationResult checkConfirmation(Settleable settleable, BigInteger confirmedEpoch) throws RpcException, InterruptedException, IOException {
 		long start = System.currentTimeMillis();
 		
-		Optional<Receipt> receipt = settleable.getRecorder().getReceipt(this.web3j);
+		Optional<Receipt> receipt = settleable.getRecorder().getReceipt(this.cfx);
 		
 		// transaction unpacked yet
 		if (!receipt.isPresent()) {
@@ -207,7 +207,8 @@ public class TransactionConfirmationMonitor {
 			settleable.updateTxHash(this.dao, packedTxHash);
 		}
 
-		if (receipt.get().getOutcomeStatus() != 1) {// for SUCCESS: core space uses 0, evm uses 1
+		// use 0 since we use a cfx rpc bridge, which convert evm 1 to 0
+		if (receipt.get().getOutcomeStatus() != 0) {// for SUCCESS: core space uses 0, evm uses 1
 			// dump data from contract for diagnostic
 			logger.info("begin to dump failed tx {}", packedTxHash);
 			try {
