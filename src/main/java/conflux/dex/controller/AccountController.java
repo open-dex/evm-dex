@@ -231,6 +231,8 @@ public class AccountController {
 		logger.info("withdraw record {}", Utils.toJson(record));
 		logger.info("withdraw currency {}", Utils.toJson(currency));
 		logger.info("withdraw request {}", Utils.toJson(request));
+		logger.info("withdraw domain {}", Utils.toJson(data.domain()));
+		logger.info("withdraw test {}", Utils.toJson(data.test()));
 		String hash = data.validate(request.userAddress, request.signature);
 		record.setHash(hash);
 		
