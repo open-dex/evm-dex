@@ -4,6 +4,8 @@ import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.web3j.crypto.Keys;
 import org.web3j.crypto.Sign;
 import org.web3j.crypto.Sign.SignatureData;
@@ -75,6 +77,8 @@ public class SignatureValidator {
 		
 		String recoveredAddress = AddressType.User.normalize(Keys.getAddress(pubkey));
 		if (!signerAddress.equalsIgnoreCase(recoveredAddress)) {
+			Logger logger = LoggerFactory.getLogger(getClass());
+			logger.warn("SignatureInvalid, want {} vs {}", recoveredAddress, signerAddress);
 			throw BusinessFault.SignatureInvalid.rise();
 		}
 		

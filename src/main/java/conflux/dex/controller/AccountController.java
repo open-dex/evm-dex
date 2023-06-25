@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import conflux.dex.common.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -227,6 +228,9 @@ public class AccountController {
 		TypedData data = record.isCrossChain()
 				? TypedWithdrawCrossChain.create(record, currency)
 				: TypedWithdraw.create(record, currency);
+		logger.info("withdraw record {}", Utils.toJson(record));
+		logger.info("withdraw currency {}", Utils.toJson(currency));
+		logger.info("withdraw request {}", Utils.toJson(request));
 		String hash = data.validate(request.userAddress, request.signature);
 		record.setHash(hash);
 		
