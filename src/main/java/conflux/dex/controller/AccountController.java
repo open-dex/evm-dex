@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import conflux.dex.blockchain.crypto.Template;
 import conflux.dex.common.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -232,7 +233,7 @@ public class AccountController {
 		logger.info("withdraw currency {}", Utils.toJson(currency));
 		logger.info("withdraw request {}", Utils.toJson(request));
 		logger.info("withdraw domain {}", Utils.toJson(data.domain()));
-		logger.info("withdraw test {}", Utils.toJson(data.test()));
+		logger.info("withdraw test {}", new Template(data).toJson());
 		String hash = data.validate(request.userAddress, request.signature);
 		record.setHash(hash);
 		
