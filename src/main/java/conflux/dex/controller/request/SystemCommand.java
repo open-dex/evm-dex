@@ -1,5 +1,6 @@
 package conflux.dex.controller.request;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 
@@ -23,6 +24,8 @@ public class SystemCommand extends AdminRequest {
 	 * Optional comment.
 	 */
 	public String comment;
+
+	public String time;
 	
 	public SystemCommand() {
 	}
@@ -38,7 +41,15 @@ public class SystemCommand extends AdminRequest {
 			throw BusinessException.validateFailed("command not specified");
 		}
 	}
-	
+
+	@Override
+	public byte[] encode() {
+		String msg = "cmd:"+this.command+"; time:"+this.time;
+		String prefix = "\u0019Ethereum Signed Message:\n"+msg.length();
+		String full = prefix + msg;
+		return full.getBytes(StandardCharsets.UTF_8);
+	}
+
 	@Override
 	protected List<RlpType> getEncodeValues() {
 		return Arrays.asList(

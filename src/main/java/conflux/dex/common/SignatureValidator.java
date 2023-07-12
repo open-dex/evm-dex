@@ -54,8 +54,6 @@ public class SignatureValidator {
 			throw BusinessFault.SystemSuspended.rise();
 		}
 		
-		AddressType.validateHexAddress(signerAddress, AddressType.User);
-		
 		Validators.validateSignature(sigHex);
 		
 		long start = System.currentTimeMillis();
@@ -75,10 +73,10 @@ public class SignatureValidator {
 			throw BusinessFault.SignatureParseFail.rise();
 		}
 		
-		String recoveredAddress = AddressType.User.normalize(Keys.getAddress(pubkey));
+		String recoveredAddress = "0x"+Keys.getAddress(pubkey);
 		if (!signerAddress.equalsIgnoreCase(recoveredAddress)) {
 			Logger logger = LoggerFactory.getLogger(getClass());
-			logger.warn("SignatureInvalid, want {} vs {}", recoveredAddress, signerAddress);
+			logger.warn("SignatureInvalid, recovered {} expect {}", recoveredAddress, signerAddress);
 			throw BusinessFault.SignatureInvalid.rise();
 		}
 		
