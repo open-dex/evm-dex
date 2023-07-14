@@ -270,7 +270,7 @@ public class BlockchainSettlementService extends BatchWorker<Settleable> {
 				txGasPrice = BlockchainConfig.instance.txResendGasPriceDelta.add(prevGasPrice);
 			}
 		}
-		context.gasLimit = BigInteger.valueOf(900_000);
+//		context.gasLimit = BigInteger.valueOf(900_000);
 		RawTransaction tx =
 				RawTransaction.createTransaction(nonce, txGasPrice, context.gasLimit,
 						context.contract.getHexAddress(), BigInteger.ZERO, context.data);

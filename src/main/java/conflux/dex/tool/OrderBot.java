@@ -1,7 +1,6 @@
 package conflux.dex.tool;
 
 import java.io.IOException;
-import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.Duration;
@@ -13,7 +12,6 @@ import java.util.Random;
 import java.util.stream.Collectors;
 
 import conflux.dex.controller.AddressTool;
-import conflux.dex.controller.EvmAddress;
 import conflux.dex.tool.contract.ERCContract;
 import conflux.web3j.CfxUnit;
 import conflux.web3j.types.CfxAddress;
@@ -27,10 +25,6 @@ import org.springframework.context.annotation.PropertySource;
 import org.springframework.core.io.ClassPathResource;
 import org.web3j.abi.datatypes.Address;
 import org.web3j.abi.datatypes.generated.Uint256;
-import org.web3j.crypto.ECKeyPair;
-import org.web3j.crypto.Keys;
-import org.web3j.crypto.Wallet;
-import org.web3j.crypto.WalletFile;
 
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.classic.joran.JoranConfigurator;
@@ -312,7 +306,7 @@ class Context {
 		}
 
 		EvmTxTool evmTxTool = new EvmTxTool();
-		String pk = am.exportPrivateKey(new EvmAddress(testCoinHolder, (int)Domain.defaultChainId), password);
+		String pk = am.exportPrivateKey(AddressTool.address(testCoinHolder), password);
 		evmTxTool.setup(evmRpcUrl, pk);
 		EthChainId send = evmTxTool.web3j.ethChainId().send();
 		System.out.println("evm chain id result " + send.getChainId().toString());

@@ -18,7 +18,7 @@ public class AddressTool {
         }
         if (hexOrBase32.startsWith("0x")) {
             // it's hex
-            return new EvmAddress(hexOrBase32, getNetId());
+            return new Address(hexOrBase32, getNetId());
         }
         return new Address(hexOrBase32);
     }
@@ -28,7 +28,7 @@ public class AddressTool {
      * @return
      */
     public static String toBase32(String hex) {
-        return new EvmAddress(hex, getNetId()).getAddress();
+        return new Address(hex, getNetId()).getAddress();
     }
 
     private static int getNetId() {

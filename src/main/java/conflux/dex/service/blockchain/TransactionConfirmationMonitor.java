@@ -312,16 +312,12 @@ public class TransactionConfirmationMonitor {
 	}
 	
 	private void onTxFailed(Settleable settleable) {
-		Recall recall = new Recall(this.cfx);
-		String errorData = "Unknown";
+		Receipt receipt = this.cfx.getTransactionReceipt(settleable.getSettledTxHash()).sendAndGet().get();
+		String errorData;
 		String txHash = settleable.getSettledTxHash();
-		
-		try {
-			errorData = recall.diagnoseFailure(txHash);
-		} catch (Exception e) {
-			logger.warn("failed to diagnose failed tx", e);
-		}
-		
+
+		errorData = receipt.getTxExecErrorMsg();
+
 		settleable.updateSettlement(this.dao, SettlementStatus.OnChainFailed);
 		
 		if (!settleable.suppressError(errorData)) {
