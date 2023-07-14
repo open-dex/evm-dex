@@ -36,7 +36,7 @@ public class CfxBuilder {
 		OkHttpClient client = new OkHttpClient.Builder()
 				.callTimeout(Duration.ofMillis(this.callTimeoutMillis))
 				.build();
-		Web3jService service = new EvmHttpProvider(this.url, client);
+		Web3jService service = new HttpService(this.url, client);
 		return Cfx.create(service, this.retry, this.retryIntervalMillis);
 	}
 

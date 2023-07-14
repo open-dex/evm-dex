@@ -25,6 +25,7 @@ apply plugin: 'idea'
 apply plugin: 'io.spring.dependency-management'
 
 repositories {
+    mavenLocal()
     // Use jcenter for resolving dependencies.
     // You can declare any Maven/Ivy/file repository here.
     jcenter()
@@ -57,9 +58,6 @@ dependencies {
     implementation 'net.sf.ehcache:ehcache:2.10.6'
     implementation 'org.springframework:spring-aop'
     implementation 'org.aspectj:aspectjweaver:1.8.12'
-    // https://mvnrepository.com/artifact/org.javassist/javassist
-    implementation group: 'org.javassist', name: 'javassist', version: '3.15.0-GA'
-
 
     compile group: 'com.fasterxml.jackson.core', name: 'jackson-core', version: '2.9.5'
     compile group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: '2.9.5'
@@ -74,7 +72,8 @@ dependencies {
     compile group: 'com.squareup.okhttp3', name: 'okhttp', version: '4.3.1'
     compile group: 'com.squareup.okhttp3', name: 'logging-interceptor', version: '4.3.1'
 //    compile 'com.github.Conflux-Chain:java-conflux-sdk:v1.1.0'
-    compile group: 'io.github.conflux-chain', name: 'conflux.web3j', version: '1.0.5'
+//    compile group: 'io.github.conflux-chain', name: 'conflux.web3j', version: '1.0.5'
+    compile group: 'io.github.conflux-chain', name: 'conflux-web3j', version: '1.0.5-1'
     // ABI & RLP for ETH
     //compile 'com.esaulpaugh:headlong:1.5.0'
 

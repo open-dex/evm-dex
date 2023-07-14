@@ -11,7 +11,6 @@ import java.util.TimeZone;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import conflux.dex.tool.ClassPatcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -151,7 +150,6 @@ public class Application {
 	}
 	
 	public static void main(String[] args) throws IOException{
-		ClassPatcher.changeCode();
 		Path path = Paths.get(lockFilename);
 		FileChannel channel = FileChannel.open(path, StandardOpenOption.WRITE, StandardOpenOption.CREATE);
 		// Exclusive lock, will be released after JAVA VM destroyed.

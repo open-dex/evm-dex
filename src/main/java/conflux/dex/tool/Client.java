@@ -152,6 +152,10 @@ public class Client {
 			System.out.println("place order :" + response.getMessage());
 			return 0;
 		}
+		if (!response.isSuccess()) {
+			System.out.println("place order fail, account "+request.getAddress());
+			return -1;
+		}
 		return response.getValue(Long.class);
 	}
 

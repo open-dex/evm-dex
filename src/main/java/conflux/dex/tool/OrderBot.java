@@ -52,6 +52,7 @@ import conflux.web3j.contract.abi.DecodeUtil;
 import conflux.web3j.types.RawTransaction;
 import org.web3j.protocol.core.methods.response.EthChainId;
 import org.web3j.utils.Numeric;
+import sdk.EvmAccountManager;
 
 /**
  * Test order. btc and usdt here are not real BTC/USDT, they are just variable names.
@@ -104,7 +105,6 @@ public class OrderBot {
 	}
 	
 	public static void main(String[] args) throws Exception {
-		ClassPatcher.changeCode();
 		configLog();
 		//Traders.needUnlock = false;
 
@@ -116,6 +116,7 @@ public class OrderBot {
 //		bot.orderMod = OrderMode.OnlyBuy;
 		bot.run();
 //		deposit(context);
+//		bot.placeOrderDebug(1f);
 		System.out.println("\nDone.");
     }
 
@@ -124,13 +125,14 @@ public class OrderBot {
 		System.out.printf("address %s, balance %s, contract %s%n", addr, b, contract);
 	}
 
-	void placeOrderDebug(BigDecimal price) throws Exception{
-		User seller = new User("0x117fbb2a50697e2883395ff6f699818085c8abbe");
+	void placeOrderDebug(float price) throws Exception{
+		BigDecimal price_ = BigDecimal.valueOf(price);
+		User seller = new User("0x1a5d3e47b1f26b754cc3c19e9470b664945f728c");
 		BigDecimal amount = BigDecimal.valueOf(0.001);
 //		BigDecimal t = price;
 //		price = amount;
 //		amount = t;
-		PlaceOrderRequest o2 = PlaceOrderRequest.limitSell(seller.getName(), this.productFactory.product.getName(), price, amount);
+		PlaceOrderRequest o2 = PlaceOrderRequest.limitSell(seller.getName(), this.productFactory.product.getName(), price_, amount);
 		o2.setSignature(this.sign(o2, seller));
 		long id = this.context.dexClient.placeOrder(o2);
 		System.out.println("order id "+id);
@@ -303,10 +305,10 @@ class Context {
 			BigInteger chainId = this.cfx.get().getStatus().sendAndGet().getChainId();
 			Domain.defaultChainId = chainId.longValueExact();
 			RawTransaction.setDefaultChainId(chainId);
-			this.am = new AccountManager(keystore, this.cfx.get().getIntNetworkId());
+			this.am = new EvmAccountManager(keystore, this.cfx.get().getIntNetworkId());
 		} else {
 			Domain.defaultChainId = this.dexClient.getChainId();
-			this.am = new AccountManager(keystore, Math.toIntExact(Domain.defaultChainId));
+			this.am = new EvmAccountManager(keystore, Math.toIntExact(Domain.defaultChainId));
 		}
 
 		EvmTxTool evmTxTool = new EvmTxTool();
@@ -403,7 +405,7 @@ class Traders {
 			if (unlock) {
 				System.out.println("unlock ok, "+trader.getHexAddress());
 			} else {
-				throw new IllegalArgumentException("Unlock failed for " + trader);
+				throw new IllegalArgumentException("Unlock failed for " + trader.getHexAddress());
 			}
 		}
 		
@@ -482,21 +484,12 @@ class Traders {
 				newTrader = list.get(i).getHexAddress();
 			} else {
 				while(true) {
-					ECKeyPair ecKeyPair = Keys.createEcKeyPair();
-					WalletFile walletFile = Wallet.createStandard("", ecKeyPair);
-					if (!walletFile.getAddress().startsWith("1")){
-						System.out.println("not a compatible address " + walletFile.getAddress());
-						continue;
-					}
-					Method m = AccountManager.class.getDeclaredMethod("createKeyFile", String.class, ECKeyPair.class);
-					m.setAccessible(true);
-					newTrader = ((conflux.web3j.types.Address) m.invoke(context.am, context.password, ecKeyPair)).getHexAddress();
-//					newTrader = context.am.createKeyFile(context.password, ecKeyPair).getHexAddress();
+					newTrader = context.am.create(context.password).getHexAddress();
 					break;
 				}
 			}
 			traders.add(newTrader);
-			System.out.println("\tnew trader: " + newTrader + " " + newTrader);
+			System.out.println("\tnew trader: " + newTrader);
 		}
 		
 		return traders;
