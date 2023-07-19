@@ -8,6 +8,7 @@ import java.util.concurrent.ExecutorService;
 
 import javax.annotation.PostConstruct;
 
+import conflux.dex.service.AccountWrapper;
 import conflux.dex.service.NonceKeeper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -142,7 +143,7 @@ public class BlockchainSettlementService extends BatchWorker<Settleable> {
 	}
 	
 	private void validateNonceOnChain() throws Exception {
-		Account admin = this.blockchain.getAdmin();
+		AccountWrapper admin = this.blockchain.getAdmin();
 		
 		// Check once for N settlements
 		BigInteger offChainNonce = admin.getNonce();
@@ -151,7 +152,7 @@ public class BlockchainSettlementService extends BatchWorker<Settleable> {
 		}
 		
 		// not reached the too future threshold
-		BigInteger onChainNonce = admin.getCfx().getNonce(admin.getAddress()).sendAndGet();
+		BigInteger onChainNonce = admin.getCfx().getNonce(admin.getObjAddress()).sendAndGet();
 		if (onChainNonce.add(this.config.settlementNonceFutureMax).compareTo(offChainNonce) >= 0) {
 			return;
 		}
@@ -249,7 +250,7 @@ public class BlockchainSettlementService extends BatchWorker<Settleable> {
 	}
 	
 	private void sendTransaction(Settleable data, Settleable.Context context) throws Exception {
-		Account admin = this.blockchain.getAdmin();
+		AccountWrapper admin = this.blockchain.getAdmin();
 		TransactionRecorder txRecorder = data.getRecorder();
 		boolean resendOnError = txRecorder != null && txRecorder.getLast().error != null;
 		

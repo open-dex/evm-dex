@@ -30,9 +30,4 @@ public class CrclContract extends AbstractContract implements Pausable, Removabl
 		return DecodeUtil.decode(encodedResult, Uint256.class);
 	}
 
-	public static String setTokenAddress(String crcl, String tokenAddress, Account admin) throws Exception{
-		Address addr = new Address(tokenAddress);
-		String tx = admin.call(AddressTool.address(crcl), "setTokenAddress", addr);
-		return tx;
-	}
 }

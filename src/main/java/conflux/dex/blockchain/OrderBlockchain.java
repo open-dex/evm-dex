@@ -3,6 +3,7 @@ package conflux.dex.blockchain;
 import java.math.BigInteger;
 
 import conflux.dex.controller.AddressTool;
+import conflux.dex.service.AccountWrapper;
 import conflux.dex.service.NonceKeeper;
 import conflux.web3j.types.Address;
 import org.influxdb.dto.Point.Builder;
@@ -32,7 +33,7 @@ public class OrderBlockchain implements InfluxDBReportable {
 	
 	private static LongGauge balanceGauge = Metrics.longGauge(OrderBlockchain.class, "admin", "balance", "cfx");
 	
-	private Account admin;
+	private AccountWrapper admin;
 	private Address adminAddress;
 	
 	private BlockchainConfig config = new BlockchainConfig();
@@ -42,12 +43,12 @@ public class OrderBlockchain implements InfluxDBReportable {
 			@Value("${user.admin.address}") String adminAddress,
 			@Value("${user.admin.privateKey}") String adminPrivateKey) {
 		logger.info("Force init cfx, network id is {}", cfx.getNetworkId());
-		this.admin = Account.create(cfx, adminPrivateKey);
-		logger.info("adminAddress from PK is [{}], [{}]", this.admin.getAddress(), this.admin.getHexAddress());
+		this.admin = new AccountWrapper(cfx, adminPrivateKey);
+		logger.info("adminAddress from PK is [{}]", this.admin.getAddress());
 		logger.info("PK prefix {}", adminPrivateKey.substring(0, 10));
 		logger.info("evm address {}", Credentials.create(adminPrivateKey).getAddress());
 		this.adminAddress = AddressTool.address(adminAddress);
-		if (!this.adminAddress.getHexAddress().equals(this.admin.getAddress().getHexAddress())) {
+		if (!this.adminAddress.getHexAddress().equals(this.admin.getAddress())) {
 			logger.info("configured admin address is {}", this.adminAddress);
 			throw new IllegalArgumentException("admin address mismatch");
 		}
@@ -71,7 +72,7 @@ public class OrderBlockchain implements InfluxDBReportable {
 		RawTransaction.setDefaultGasPrice(config.txGasPrice);
 	}
 
-	public Account getAdmin() {
+	public AccountWrapper getAdmin() {
 		return this.admin;
 	}
 	
@@ -103,7 +104,7 @@ public class OrderBlockchain implements InfluxDBReportable {
 		int retryTimes = 3;
 		int sleepSeconds = 10;
 		do {
-			onChainNonce = this.admin.getCfx().getNonce(this.admin.getAddress()).sendAndGet();
+			onChainNonce = this.admin.getCfx().getNonce(this.admin.getObjAddress()).sendAndGet();
 			offChainNonce = this.admin.getNonce();
 			BigInteger nonceCache = NonceKeeper.nonceCache.get();
 			if (nonceCache.compareTo(offChainNonce) > 0) {
