@@ -90,7 +90,7 @@ public class AbstractCleaner {
     private void savePos(int oldPos, long newPos) {
         if (newPos > oldPos) {
             configDao.setConfig(positionKey, String.valueOf(newPos));
-            logger.debug("save position {}, cleaner {}", newPos, positionKey);
+//            logger.debug("save position {}, cleaner {}", newPos, positionKey);
         }
     }
 

@@ -5,18 +5,25 @@ import java.math.BigInteger;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 
+import javax.annotation.PostConstruct;
+
 @Configuration
 public class BlockchainConfig extends AutoConfigBase{
 	
 	public static BlockchainConfig instance = new BlockchainConfig();
 	
-	public BlockchainConfig() {
+	@PostConstruct
+	public void init() {
 		instance = this;
 	}
-	
+
+	@Value("${user.admin.privateKey}")
+	public String adminPrivateKey;
+	@Value("${blockchain.evm.url}")
+	public String evmUrl;
 	@Value("${blockchain.enabled:false}")
 	public boolean enabled;
-	
+
 	// settlement configurations
 	@Value("${blockchain.settlement.pause.sleep:5000}")
 	public long settlementPausedSleepMillis = 5000;
@@ -248,5 +255,21 @@ public class BlockchainConfig extends AutoConfigBase{
 
 	public String getTxRelayerUrls() {
 		return txRelayerUrls;
+	}
+
+	public String getAdminPrivateKey() {
+		return adminPrivateKey;
+	}
+
+	public void setAdminPrivateKey(String adminPrivateKey) {
+		this.adminPrivateKey = adminPrivateKey;
+	}
+
+	public String getEvmUrl() {
+		return evmUrl;
+	}
+
+	public void setEvmUrl(String evmUrl) {
+		this.evmUrl = evmUrl;
 	}
 }

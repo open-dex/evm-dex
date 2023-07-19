@@ -82,7 +82,7 @@ public class BlockchainService {
 	/**
 	 * Periodically poll event logs on blockchain.
 	 */
-	@Scheduled(initialDelay = 5000, fixedDelay = 5000)
+	@Scheduled(initialDelay = 1000, fixedDelay = 1000)
 	public void poll() {
 		logger.trace("poll event logs started");
 		
@@ -92,9 +92,9 @@ public class BlockchainService {
 			}
 		} catch (RpcException e) {
 			if (Utils.isRpcError(e)) {
-				logger.error("failed to poll event logs", e);
+				logger.error("rpc, failed to poll event logs", e);
 			} else {
-				logger.debug("failed to poll event logs: {}", e.getMessage());
+				logger.error("failed to poll event logs: {}", e);
 			}
 		} catch (Exception e) {
 			logger.error("failed to poll event logs", e);

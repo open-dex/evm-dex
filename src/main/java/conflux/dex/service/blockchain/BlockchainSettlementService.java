@@ -1,5 +1,6 @@
 package conflux.dex.service.blockchain;
 
+import java.io.IOException;
 import java.math.BigInteger;
 import java.util.HashMap;
 import java.util.List;
@@ -7,11 +8,13 @@ import java.util.concurrent.ExecutorService;
 
 import javax.annotation.PostConstruct;
 
+import conflux.dex.service.AccountWrapper;
 import conflux.dex.service.NonceKeeper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.web3j.crypto.Credentials;
 import org.web3j.crypto.Hash;
 
 import com.codahale.metrics.Timer;
@@ -39,8 +42,13 @@ import conflux.dex.service.HealthService.PauseSource;
 import conflux.dex.service.blockchain.settle.Settleable;
 import conflux.dex.service.blockchain.settle.TransactionRecorder;
 import conflux.web3j.Account;
-import conflux.web3j.types.RawTransaction;
 import conflux.web3j.types.SendTransactionResult;
+import org.web3j.crypto.RawTransaction;
+import org.web3j.protocol.Web3j;
+import org.web3j.protocol.core.methods.response.EthSendTransaction;
+import org.web3j.protocol.core.methods.response.EthTransaction;
+import org.web3j.protocol.http.HttpService;
+import org.web3j.tx.RawTransactionManager;
 
 @Service
 public class BlockchainSettlementService extends BatchWorker<Settleable> {
@@ -49,7 +57,9 @@ public class BlockchainSettlementService extends BatchWorker<Settleable> {
 	private static final QueueMetric queue = Metrics.queue(BlockchainSettlementService.class);
 	private static final Timer perf = Metrics.timer(BlockchainSettlementService.class, "perf");
 	private static final Timer perfSendTx = Metrics.timer(BlockchainSettlementService.class, "sign-send-tx");
-	
+	private Web3j web3j;
+	private RawTransactionManager rawTxManager;
+
 	private DexDao dao;
 	private OrderBlockchain blockchain;
 	private TransactionConfirmationMonitor monitor;
@@ -75,6 +85,8 @@ public class BlockchainSettlementService extends BatchWorker<Settleable> {
 		this.blockchain = blockchain;
 		this.monitor = monitor;
 		this.config = config;
+		this.web3j = Web3j.build(new HttpService(config.evmUrl));
+		this.rawTxManager = new RawTransactionManager(this.web3j, Credentials.create(config.adminPrivateKey));
 		
 		Metrics.dump(this);
 		
@@ -131,7 +143,7 @@ public class BlockchainSettlementService extends BatchWorker<Settleable> {
 	}
 	
 	private void validateNonceOnChain() throws Exception {
-		Account admin = this.blockchain.getAdmin();
+		AccountWrapper admin = this.blockchain.getAdmin();
 		
 		// Check once for N settlements
 		BigInteger offChainNonce = admin.getNonce();
@@ -140,7 +152,7 @@ public class BlockchainSettlementService extends BatchWorker<Settleable> {
 		}
 		
 		// not reached the too future threshold
-		BigInteger onChainNonce = admin.getCfx().getNonce(admin.getAddress()).sendAndGet();
+		BigInteger onChainNonce = admin.getCfx().getNonce(admin.getObjAddress()).sendAndGet();
 		if (onChainNonce.add(this.config.settlementNonceFutureMax).compareTo(offChainNonce) >= 0) {
 			return;
 		}
@@ -238,7 +250,7 @@ public class BlockchainSettlementService extends BatchWorker<Settleable> {
 	}
 	
 	private void sendTransaction(Settleable data, Settleable.Context context) throws Exception {
-		Account admin = this.blockchain.getAdmin();
+		AccountWrapper admin = this.blockchain.getAdmin();
 		TransactionRecorder txRecorder = data.getRecorder();
 		boolean resendOnError = txRecorder != null && txRecorder.getLast().error != null;
 		
@@ -251,29 +263,46 @@ public class BlockchainSettlementService extends BatchWorker<Settleable> {
 		BigInteger epoch = this.heartBeatService == null
 				? admin.getCfx().getEpochNumber().sendAndGet()
 				: this.heartBeatService.getCurrentEpoch();
-		RawTransaction tx = RawTransaction.call(nonce, context.gasLimit, context.contract, context.storageLimit, epoch, context.data);
-		
+		conflux.web3j.types.RawTransaction cfxTx = conflux.web3j.types.RawTransaction.call(nonce, context.gasLimit, context.contract, context.storageLimit, epoch, context.data);
+		BigInteger txGasPrice = config.txGasPrice;
 		if (resendOnError) {
 			BigInteger prevGasPrice = txRecorder.getLast().gasPrice;
 			if (prevGasPrice != null) {
-				tx.setGasPrice(BlockchainConfig.instance.txResendGasPriceDelta.add(prevGasPrice));
+				txGasPrice = BlockchainConfig.instance.txResendGasPriceDelta.add(prevGasPrice);
 			}
 		}
-		
-		String signedTx = admin.sign(tx);
+//		context.gasLimit = BigInteger.valueOf(900_000);
+		RawTransaction tx =
+				RawTransaction.createTransaction(nonce, txGasPrice, context.gasLimit,
+						context.contract.getHexAddress(), BigInteger.ZERO, context.data);
+
+//		String signedTx = admin.sign(tx);
+		String signedTx = rawTxManager.sign(tx);
 		String txHash = Hash.sha3(signedTx);
+		logger.info("resendOnError : {} , nonce {} tx hash {}", resendOnError, nonce, txHash);
 
 		NonceKeeper.reserve(resendOnError, this.dao, txHash, nonce);
-		data.updateSettlement(this.dao, SettlementStatus.OffChainSettled, txHash, tx);
+		data.updateSettlement(this.dao, SettlementStatus.OffChainSettled, txHash, cfxTx);
+		if (!resendOnError) {
+			// just track nonce in memory, since we use both EVM web3j and cfx sdk.
+			admin.setNonce(nonce.add(BigInteger.ONE));
+		}
 		
 		SendTransactionResult result;
 		
 		try (Context ctx = perfSendTx.time()) {
+			EthSendTransaction ethSendTransaction = web3j.ethSendRawTransaction(signedTx).send();
+			if (ethSendTransaction.hasError()) {
+				result = new SendTransactionResult(ethSendTransaction.getError());
+			} else {
+				result = new SendTransactionResult(txHash);
+			}
 			// For re-send case, do not update the local tx nonce of DEX admin.
-			result = resendOnError
-					? admin.getCfx().sendRawTransactionAndGet(signedTx)
-					: admin.send(signedTx);	// nonce++ if succeeded.
-			NonceKeeper.saveNext(resendOnError, this.dao, admin.getNonce().toString());
+//			result = resendOnError
+//					? admin.getCfx().sendRawTransactionAndGet(signedTx)
+//					: admin.send(signedTx);	// nonce++ if succeeded.
+//			NonceKeeper.saveNext(resendOnError, this.dao, admin.getNonce().toString());
+			NonceKeeper.saveNext(resendOnError, this.dao, resendOnError ? nonce.toString() : nonce.add(BigInteger.ONE).toString());
 		}
 		
 		if (result.getRawError() != null) {
@@ -324,8 +353,11 @@ public class BlockchainSettlementService extends BatchWorker<Settleable> {
 				break;
 				
 			default:
-				throw new Exception(String.format("failed to send transaction to full node and got unknown error: code = %s, data = %s, message = %s",
-						result.getRawError().getCode(), result.getRawError().getData(), result.getRawError().getMessage()));
+				logger.info("tx sender {}", this.rawTxManager.getFromAddress());
+				String info = String.format("failed to send transaction to full node and got unknown error: code = %s, data = %s, message = %s",
+						result.getRawError().getCode(), result.getRawError().getData(), result.getRawError().getMessage());
+				logger.error("tx fail: {}", info);
+				throw new Exception(info);
 			}
 		} else if (!result.getTxHash().equals(txHash)) {
 			this.fatal(data, "tx hash mismatch: tx.hash() = %s, RPC returned = %s", txHash, result.getTxHash());

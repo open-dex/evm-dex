@@ -69,7 +69,7 @@ public class BlockchainSettlementServiceTest {
         String adminAddress = "0x14d45d87593eb39da895f4d78bac9c2e094d90b6";
         String adminPrivateKey = "0xc57bbb9be823ab148911ec6bcae459d0090afff7fb86d286e5947d3614a023a1";
         OrderBlockchain blockchain = new OrderBlockchain(cfx, adminAddress, adminPrivateKey);
-        TransactionConfirmationMonitor monitor = new TransactionConfirmationMonitor(cfx, dao.get(), heartBeatService);
+        TransactionConfirmationMonitor monitor = new TransactionConfirmationMonitor(cfx, null, dao.get(), heartBeatService);
         FeeService feeService = new FeeService(null, null){
             @Override
             public void reload() {

@@ -1,5 +1,6 @@
 package conflux.dex.controller;
 
+import java.io.IOException;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -148,7 +149,7 @@ public class SystemController {
 	public TransactionConfirmationMonitor.CheckConfirmationResult checkTx(Long txNonce) throws InterruptedException {
 		try {
 			return SpringTool.getBean(TransactionConfirmationMonitor.class).checkConfirmation(txNonce);
-		} catch (RpcException e) {
+		} catch (RpcException | IOException e) {
 			throw BusinessException.internalError(e.getMessage());
 		}
 	}
@@ -641,20 +642,6 @@ public class SystemController {
 		}
 		
 		return this.shuttleflow.reload();
-	}
-
-	/**
-	 * @ignore
-	 * @return
-	 */
-	@AuthRequire
-	@PostMapping("/set-crcl-token")
-	public String setCrclTokenAddress(String crcl, String token) throws Exception{
-		Account admin = SpringTool.getBean(OrderBlockchain.class).getAdmin();
-		String tx = CrclContract.setTokenAddress(crcl, token, admin);
-		logger.info("set crcl's token, clcl {}, token {}, tx {}",
-				crcl, token, tx);
-		return tx;
 	}
 
 	/**

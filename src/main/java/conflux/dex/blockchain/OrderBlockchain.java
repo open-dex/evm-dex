@@ -3,6 +3,7 @@ package conflux.dex.blockchain;
 import java.math.BigInteger;
 
 import conflux.dex.controller.AddressTool;
+import conflux.dex.service.AccountWrapper;
 import conflux.dex.service.NonceKeeper;
 import conflux.web3j.types.Address;
 import org.influxdb.dto.Point.Builder;
@@ -23,6 +24,7 @@ import conflux.web3j.Account;
 import conflux.web3j.Cfx;
 import conflux.web3j.CfxUnit;
 import conflux.web3j.types.RawTransaction;
+import org.web3j.crypto.Credentials;
 
 @Component
 public class OrderBlockchain implements InfluxDBReportable {
@@ -31,7 +33,7 @@ public class OrderBlockchain implements InfluxDBReportable {
 	
 	private static LongGauge balanceGauge = Metrics.longGauge(OrderBlockchain.class, "admin", "balance", "cfx");
 	
-	private Account admin;
+	private AccountWrapper admin;
 	private Address adminAddress;
 	
 	private BlockchainConfig config = new BlockchainConfig();
@@ -41,7 +43,15 @@ public class OrderBlockchain implements InfluxDBReportable {
 			@Value("${user.admin.address}") String adminAddress,
 			@Value("${user.admin.privateKey}") String adminPrivateKey) {
 		logger.info("Force init cfx, network id is {}", cfx.getNetworkId());
+		this.admin = new AccountWrapper(cfx, adminPrivateKey);
+		logger.info("adminAddress from PK is [{}]", this.admin.getAddress());
+		logger.info("PK prefix {}", adminPrivateKey.substring(0, 10));
+		logger.info("evm address {}", Credentials.create(adminPrivateKey).getAddress());
 		this.adminAddress = AddressTool.address(adminAddress);
+		if (!this.adminAddress.getHexAddress().equals(this.admin.getAddress())) {
+			logger.info("configured admin address is {}", this.adminAddress);
+			throw new IllegalArgumentException("admin address mismatch");
+		}
 		BigInteger balance = cfx.getBalance(this.adminAddress).sendAndGet();
 		if (balance.compareTo(BigInteger.ZERO) == 0) {
 			throw BusinessException.internalError("Balance of DEX admin is too small: " + balance);
@@ -49,7 +59,6 @@ public class OrderBlockchain implements InfluxDBReportable {
 		
 		balanceGauge.setValue(CfxUnit.drip2Cfx(balance).longValue());
 		
-		this.admin = Account.create(cfx, adminPrivateKey);
 
 		logger.info("DEX admin initialized: address = {}, nonce = {}, balance = {}",
 				adminAddress, this.admin.getNonce(), CfxUnit.drip2Cfx(balance).toPlainString());
@@ -63,7 +72,7 @@ public class OrderBlockchain implements InfluxDBReportable {
 		RawTransaction.setDefaultGasPrice(config.txGasPrice);
 	}
 
-	public Account getAdmin() {
+	public AccountWrapper getAdmin() {
 		return this.admin;
 	}
 	
@@ -95,7 +104,7 @@ public class OrderBlockchain implements InfluxDBReportable {
 		int retryTimes = 3;
 		int sleepSeconds = 10;
 		do {
-			onChainNonce = this.admin.getCfx().getNonce(this.admin.getAddress()).sendAndGet();
+			onChainNonce = this.admin.getCfx().getNonce(this.admin.getObjAddress()).sendAndGet();
 			offChainNonce = this.admin.getNonce();
 			BigInteger nonceCache = NonceKeeper.nonceCache.get();
 			if (nonceCache.compareTo(offChainNonce) > 0) {

@@ -12,7 +12,9 @@ import java.util.Random;
 import java.util.stream.Collectors;
 
 import conflux.dex.controller.AddressTool;
+import conflux.dex.tool.contract.ERCContract;
 import conflux.web3j.CfxUnit;
+import conflux.web3j.types.CfxAddress;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -23,7 +25,6 @@ import org.springframework.context.annotation.PropertySource;
 import org.springframework.core.io.ClassPathResource;
 import org.web3j.abi.datatypes.Address;
 import org.web3j.abi.datatypes.generated.Uint256;
-import org.web3j.utils.Numeric;
 
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.classic.joran.JoranConfigurator;
@@ -37,14 +38,15 @@ import conflux.dex.model.Currency;
 import conflux.dex.model.Product;
 import conflux.dex.model.User;
 import conflux.dex.service.PlaceOrderRequest;
-import conflux.web3j.Account.Option;
 import conflux.web3j.AccountManager;
 import conflux.web3j.Cfx;
 import conflux.web3j.contract.ContractCall;
 import conflux.web3j.contract.ERC777;
 import conflux.web3j.contract.abi.DecodeUtil;
-import conflux.web3j.response.Receipt;
 import conflux.web3j.types.RawTransaction;
+import org.web3j.protocol.core.methods.response.EthChainId;
+import org.web3j.utils.Numeric;
+import sdk.EvmAccountManager;
 
 /**
  * Test order. btc and usdt here are not real BTC/USDT, they are just variable names.
@@ -98,7 +100,8 @@ public class OrderBot {
 	
 	public static void main(String[] args) throws Exception {
 		configLog();
-		
+		//Traders.needUnlock = false;
+
 		@SuppressWarnings("resource")
 		ApplicationContext context = new AnnotationConfigApplicationContext(
 				OrderBot.class, Context.class, ProductFactory.class, Traders.class, PriceRandom.class);
@@ -107,6 +110,7 @@ public class OrderBot {
 //		bot.orderMod = OrderMode.OnlyBuy;
 		bot.run();
 //		deposit(context);
+//		bot.placeOrderDebug(1f);
 		System.out.println("\nDone.");
     }
 
@@ -115,13 +119,14 @@ public class OrderBot {
 		System.out.printf("address %s, balance %s, contract %s%n", addr, b, contract);
 	}
 
-	void placeOrderDebug(BigDecimal price) throws Exception{
-		User seller = new User("0x117fbb2a50697e2883395ff6f699818085c8abbe");
+	void placeOrderDebug(float price) throws Exception{
+		BigDecimal price_ = BigDecimal.valueOf(price);
+		User seller = new User("0x1a5d3e47b1f26b754cc3c19e9470b664945f728c");
 		BigDecimal amount = BigDecimal.valueOf(0.001);
 //		BigDecimal t = price;
 //		price = amount;
 //		amount = t;
-		PlaceOrderRequest o2 = PlaceOrderRequest.limitSell(seller.getName(), this.productFactory.product.getName(), price, amount);
+		PlaceOrderRequest o2 = PlaceOrderRequest.limitSell(seller.getName(), this.productFactory.product.getName(), price_, amount);
 		o2.setSignature(this.sign(o2, seller));
 		long id = this.context.dexClient.placeOrder(o2);
 		System.out.println("order id "+id);
@@ -271,29 +276,40 @@ class Context {
 	public Optional<Cfx> cfx;
 	public AccountManager am;
 	public String password;
-	
+	public String evmRpcUrl;
+
 	@Autowired
 	public void init(
 			@Value("${dex.url}") String dexUrl,
 			@Value("${dex.cfx.disabled}") boolean cfxDisabled,
 			@Value("${dex.cfx.url}") String cfxUrl,
+			@Value("${dex.evmRpcUrl.url}") String evmRpcUrl,
+			@Value("${user.erc777.address}") String testCoinHolder,
 			@Value("${user.keystore}") String keystore,
 			@Value("${user.keyfile.password}") String password) throws IOException,Exception {
+		System.out.println("cfx url is " + cfxUrl);
+		System.out.println("dex url is " + dexUrl);
 		this.dexClient = new Client(dexUrl);
-		this.cfx = cfxDisabled ? Optional.empty() : Optional.of(new CfxBuilder(cfxUrl).withRetry(3, 1000).withCallTimeout(3000).build());
+		this.cfx = cfxDisabled ? Optional.empty() : Optional.of(new CfxBuilder(cfxUrl)
+				.withRetry(3, 1000).withCallTimeout(3000).build());
+		this.evmRpcUrl = evmRpcUrl;
 		this.password = password;
 
 		if (this.cfx.isPresent()) {
-			System.out.println("cfx url is " + cfxUrl);
-			System.out.println("dex url is " + dexUrl);
 			BigInteger chainId = this.cfx.get().getStatus().sendAndGet().getChainId();
 			Domain.defaultChainId = chainId.longValueExact();
 			RawTransaction.setDefaultChainId(chainId);
-			this.am = new AccountManager(keystore, this.cfx.get().getIntNetworkId());
+			this.am = new EvmAccountManager(keystore, this.cfx.get().getIntNetworkId());
 		} else {
 			Domain.defaultChainId = this.dexClient.getChainId();
-			this.am = new AccountManager(keystore, Math.toIntExact(Domain.defaultChainId));
+			this.am = new EvmAccountManager(keystore, Math.toIntExact(Domain.defaultChainId));
 		}
+
+		EvmTxTool evmTxTool = new EvmTxTool();
+		String pk = am.exportPrivateKey(AddressTool.address(testCoinHolder), password);
+		evmTxTool.setup(evmRpcUrl, pk);
+		EthChainId send = evmTxTool.web3j.ethChainId().send();
+		System.out.println("evm chain id result " + send.getChainId().toString());
 	}
 }
 
@@ -342,7 +358,7 @@ class Traders {
 	protected conflux.web3j.types.Address erc777User;
 	@Value("${user.trader.number}")
 	private int numTraders;
-	@Value("#{'${user.trader.predefined:}'.split(',')}")
+	@Value("#{'${user.trader.predefined}'.split(',')}")
 	private List<String> tradersHex;
 	private List<conflux.web3j.types.Address> traders;
 	static boolean needUnlock = true;
@@ -364,12 +380,9 @@ class Traders {
 	@Autowired
 	public void init(Context context, ProductFactory factory) throws Exception {
 		this.erc777User = AddressTool.address(this.erc777UserHex);
-		if (!needUnlock) {
-			return;
-		}
 		this.tradersHex.removeIf(String::isEmpty);
 		tradersHex = tradersHex.stream().map(String::toLowerCase).collect(Collectors.toList());
-		if (this.tradersHex.size() == 1 || (this.tradersHex.isEmpty() && this.numTraders < 2)) {
+		if (needUnlock && (this.tradersHex.size() == 1 || (this.tradersHex.isEmpty() && this.numTraders < 2))) {
 			throw new Exception("too few traders configured, requires 2 at least");
 		}
 
@@ -384,9 +397,9 @@ class Traders {
 			}
 			boolean unlock = context.am.unlock(trader, context.password, Duration.ofDays(1000));
 			if (unlock) {
-				System.out.println("unlock ok, "+trader);
+				System.out.println("unlock ok, "+trader.getHexAddress());
 			} else {
-				throw new IllegalArgumentException("Unlock failed for " + trader);
+				throw new IllegalArgumentException("Unlock failed for " + trader.getHexAddress());
 			}
 		}
 		
@@ -416,7 +429,8 @@ class Traders {
 		
 		BigInteger balance = context.cfx.get().getBalance(this.erc777User).sendAndGet();
 		if (balance.compareTo(BigInteger.ZERO) == 0) {
-			throw new Exception("CFX not enough for ERC777 user: " + this.erc777User);
+			throw new Exception("CFX not enough for ERC777 user: "
+					+ this.erc777User + " hex " + this.erc777User.getHexAddress());
 		}
 		
 		System.out.println("Begin to deposit 10 BTCs and 100 USDTs for each trader ...");
@@ -425,11 +439,6 @@ class Traders {
         depositCurrency(context, baseCurrency, erc777Account, 1);
         String lastTxHash = depositCurrency(context, factory.usdt, erc777Account, 1);
 
-        // wait for the receipt of last tx
-		System.out.println("Waiting for the completion of deposit txs ...");
-		this.waitForReceiptAndNonce(context.cfx.get(), lastTxHash, this.erc777User, erc777Account.getNonce());
-		System.out.println("All txs completed");
-		
 		// wait for DEX to monitor the contract event logs to mint for each trader
 		System.out.println("Waiting for the DEX to poll event logs to mint for traders ...");
 		for (int i = 0; i < this.traders.size(); i++) {
@@ -444,11 +453,14 @@ class Traders {
 		String tokenAddressHex = currency.getTokenAddress();
 		conflux.web3j.types.Address tokenAddress = AddressTool.address(tokenAddressHex);
 		this.ensureErc777Balance(context.cfx.get(), tokenAddress, depositAmount);
-        ERC777 usdtExecutor = new ERC777(context.cfx.get(), tokenAddress, erc777Account);
-        String lastTxHash = "";
+
+		EvmTxTool evmERC = new EvmTxTool();
+		String pk = context.am.exportPrivateKey(erc777Account.getAddress(), context.password);
+		evmERC.setup(context.evmRpcUrl, pk);
+		ERCContract ercContract = evmERC.buildERCContract(tokenAddressHex);
+		String lastTxHash = "";
         for (String recipient : this.tradersHex) {
-            lastTxHash = usdtExecutor.send(new Option(), AddressTool.address(currency.getContractAddress()), depositAmount,
-					Numeric.hexStringToByteArray(recipient));
+            lastTxHash = ercContract.send(currency.getContractAddress(), depositAmount, Numeric.hexStringToByteArray(recipient)).send().getTransactionHash();
 			System.out.println("deposit " + currency.getName() + " x " + depositAmount
 					+ ", to " + recipient + ", hash " + lastTxHash);
         }
@@ -465,7 +477,10 @@ class Traders {
 			if (i<list.size()) {
 				newTrader = list.get(i).getHexAddress();
 			} else {
-				newTrader = context.am.create(context.password).getHexAddress();
+				while(true) {
+					newTrader = context.am.create(context.password).getHexAddress();
+					break;
+				}
 			}
 			traders.add(newTrader);
 			System.out.println("\tnew trader: " + newTrader);
@@ -474,23 +489,14 @@ class Traders {
 		return traders;
 	}
 	
-	private void waitForReceiptAndNonce(Cfx cfx, String txHash, conflux.web3j.types.Address txSender, BigInteger expectedNonce) throws InterruptedException {
-		Receipt receipt = cfx.waitForReceipt(txHash);
-		if (receipt.getOutcomeStatus() != 0) {
-			throw new RuntimeException(String.format("Receipt failed, outcome = %s, tx = %s", receipt.getOutcomeStatus(), txHash));
-		}
-
-		cfx.waitForNonce(txSender, expectedNonce);
-	}
-	
 	private void ensureErc777Balance(Cfx cfx, conflux.web3j.types.Address erc777, BigInteger amountPerTrader) throws Exception {
-		ERC777 call = new ERC777(cfx, erc777);
-		BigInteger balance = call.balanceOf(this.erc777User);
+		ERC777 call = new ERC777(cfx, new CfxAddress(erc777.getAddress()));
+		BigInteger balance = call.balanceOf(new Address(this.erc777User.getHexAddress()));
 		BigInteger totalDeposit = amountPerTrader.multiply(BigInteger.valueOf(this.traders.size()));
 		System.out.println("");
 		if (balance == null || balance.compareTo(totalDeposit) < 0) {
 			throw new Exception(String.format("ERC777 [%s] balance not enough to deposit" +
-					"\n need %s , actual %s, user %s", erc777, totalDeposit, balance, erc777User));
+					"\n need %s , actual %s, user %s", erc777.getHexAddress(), totalDeposit, balance, erc777User.getHexAddress()));
 		}
 	}
 	
